@@ -7,9 +7,11 @@
 # Created by Ivo Pullens, Emmission, 2014-2016 -- www.emmission.nl
 #
 # Tested with:
+# * MySensors 2.0.0
 # * MySensors 1.5.x
 # * Mosquitto 1.4.2 MQTT Broker (mosquitto.org)
 # * Ubuntu Linux 12.04.5 & 15.10.
+# * CentOS 6.x
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -47,7 +49,7 @@ use Data::Dumper;
 use List::Util qw(first);
 use Storable;
 use Time::Zone;
-use v5.14;              # Requires support for given/when constructs
+use v5.10;              # Requires support for given/when constructs
 use Device::SerialPort;
 use Getopt::Long;
 use Fcntl ':flock';
@@ -270,10 +272,10 @@ sub subTypeToStr
   # Convert subtype to string, depending on message type
   given ($cmd)
   {
-    $subType = (sensorTypesToStr)[$subType] when C_PRESENTATION;
-    $subType = (variableTypesToStr)[$subType] when C_SET;
-    $subType = (variableTypesToStr)[$subType] when C_REQ;
-    $subType = (internalMessageTypesToStr)[$subType] when C_INTERNAL;
+    when (C_PRESENTATION) { $subType = (sensorTypesToStr)[$subType]; }
+    when (C_SET)		{ $subType = (variableTypesToStr)[$subType]; }
+    when (C_REQ)		{ $subType = (variableTypesToStr)[$subType]; }
+    when (C_INTERNAL)	{ $subType = (internalMessageTypesToStr)[$subType]; }
     default { $subType = "<UNKNOWN_$subType>" }
   }  
   return $subType;
@@ -499,7 +501,8 @@ while (1)
     if ($useSerial)
     {
       $gw_handle = AnyEvent::Handle->new(
-        fh => $serialDevice->{'HANDLE'},
+        # fh => $serialDevice->{'HANDLE'},
+		fh       => new_from_fd IO::Handle( $serialDevice->{FD}, "w" ),
         on_error => sub {
           my ($handle, $fatal, $message) = @_;
           $handle->destroy;
