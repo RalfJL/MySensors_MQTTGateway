@@ -165,6 +165,13 @@ my $serialBaud   = 115200;
 my $serialBits   = 8;
 my $serialParity = "none";
 my $serialStop   = 1;
+
+# -- Settings if gateway should perform nodeID allocation
+# use this only if you do not have a controller available
+my $firstID           = 0;       # 0 means disabled
+my $lastID            = 254;
+my $nodeIDStorageFile = undef;
+my $nodeID = {};
   
 my $subscriptionStorageFile = undef;
 
@@ -186,7 +193,10 @@ if ( GetOptions ( 'serial:s'   => \$serialPort,
                   'gwport:i'   => \$mysnsPort,
                   'storage:s'  => \$subscriptionStorageFile,
                   'log:s'      => \$log,
-                  'help|h'     => \$helpme ) )
+                  'help|h'     => \$helpme, 
+				  'firstID:i'    => \$firstID,
+				  'lastID:i'     => \$lastID,
+				  'storageID:s'  => \$nodeIDStorageFile,) )
 {
     if (!defined($helpme))
     {
@@ -204,6 +214,15 @@ else
 {
     $exit_cause = "Illegal commandline options";
 }
+
+# see if the nodeID's are correct
+if ( ( $firstID < 0 || $firstID > 254 ) || ( $lastID < 0 || $lastID > 254 ) ) {
+	$exit_cause = "Option firstID or lastID out of range; 0 < IDnumber < 255";
+}
+if ( $firstID >= $lastID ) {
+	$exit_cause = "Option firstID is larger or equal to lastID";
+}
+
 print STDERR "\n--- Error: $exit_cause ---\n" if (defined($exit_cause));
 PrintHelpAndExit() if (defined($helpme) || defined($exit_cause)); 
 
@@ -564,6 +583,43 @@ sub onRequestTime
   $gw_handle->push_write("$mySnsMsg\n") if (defined $gw_handle);
 }
 
+sub onRequestNodeID {
+
+	# Node requests a nodeID; do this ONLY if you NOT have a crontroller
+	my $msgRef = shift;
+
+	return if ( $firstID <= 0 );    # oops; we should not have been called
+	for ( my $i = $firstID ; $i <= $lastID ; $i++ ) {
+		if ( !defined $nodeID->{$i} ) {
+			$nodeID->{$i} = localtime;
+
+			# save the id
+			store( $nodeID, $nodeIDStorageFile );
+			$msgRef->{'payload'} = $i;
+			$msgRef->{'subType'} = I_ID_RESPONSE;
+			my $mySnsMsg = createMsg($msgRef);
+			dolog("Request nodeID: $i => $mySnsMsg");
+			$gw_handle->push_write("$mySnsMsg\n") if ( defined $gw_handle );
+			return;
+		}
+	}
+	dolog("Request nodeID: but no nodeID available");
+}
+
+# check and note radioId during receive
+sub checkNodeID {
+	my $nID = shift;
+	return if ( $nID == 0 || defined $nodeID->{$nID} );
+	debug("new radioId $nID discovered");
+	if ( $nID >= $firstID && $nID <= $lastID ) {
+		dolog(
+			"WARNING: radioID $nID was not given by me! Remember new radioID");
+	}
+	$nodeID->{$nID} = localtime;
+	store( $nodeID, $nodeIDStorageFile );
+}
+
+
 sub handleRead
 {
   my $data = shift;
@@ -577,8 +633,10 @@ sub handleRead
     {
       onNodePresenation($msgRef) if (($msgRef->{'childId'} == 255) && ($msgRef->{'cmd'} == C_PRESENTATION));
       onRequestTime($msgRef)     if (($msgRef->{'cmd'} == C_INTERNAL) && ($msgRef->{'subType'} == I_TIME));
+	  onRequestNodeID($msgRef)   if ( ( $nodeID > 0 ) && ( $msgRef->{'cmd'} == C_INTERNAL ) && ( $msgRef->{'subType'} == I_ID_REQUEST ) );
       my $topic   = createTopic($msgRef);
       my $message = $msgRef->{'payload'};
+	  $message = "" if !defined $message;
       dumpMsg("RX", $msgRef, "Publish to broker '$topic':'$message'");
       publish( $topic, $message );
     }
@@ -639,6 +697,24 @@ if (! -e $subscriptionStorageFile)
 # Get an exclusive lock on the subscription file, to prevent multiple instances from running simultaneously.
 die "Fatal error: Unable to open subscription file '$subscriptionStorageFile'. Another instance of this script might be running." unless (open SS, $subscriptionStorageFile);
 die "Fatal error: Subscription file '$subscriptionStorageFile' is locked by another process." unless(flock SS, LOCK_EX|LOCK_NB);
+
+# Define nodeID storage file, when not available
+if ( !defined($nodeIDStorageFile) ) {
+	$nodeIDStorageFile =
+	  $useSerial ? $serialPort : $mysnsHost . "_" . $mysnsPort;
+	$nodeIDStorageFile =~ s/[\\\/\:\? ]/_/g;
+	$nodeIDStorageFile = "/var/run/mqttMySensors/nodeID_" . $nodeIDStorageFile;
+}
+
+# If file does not exist, create it here
+if ( !-e $nodeIDStorageFile ) {
+	store( $nodeID, $nodeIDStorageFile ) || die "Failed to create nodeID file '$nodeIDStorageFile': $!";
+}
+
+# Get an exclusive lock on the nodeID file, to prevent multiple instances from running simultaneously.
+die "Fatal error: Unable to open nodeID file '$nodeIDStorageFile'. Another instance of this script might be running." unless ( open NS, $nodeIDStorageFile );
+die "Fatal error: nodeID file '$nodeIDStorageFile' is locked by another process." unless ( flock NS, LOCK_EX | LOCK_NB );
+
 
 dolog("MQTT Client Gateway for MySensors");
 dolog("Broker:        $mqttHost:$mqttPort");
@@ -751,6 +827,16 @@ dolog("trying to restore subscriptions");
       }
     }
     
+	# try to restore nodeID database
+	if ( $firstID > 0 ) {
+		dolog("trying to restore nodeID's");
+		if ( -e $nodeIDStorageFile ) {
+			$nodeID = retrieve($nodeIDStorageFile);
+			my $c = keys %{$nodeID};
+			dolog("restored $c nodeID's");
+		}
+	}
+		
     $cv = AnyEvent->condvar;
     $cv->recv; 
   }
@@ -798,6 +884,10 @@ Options:    For serial connection to gateway:
             --mqttport  Port of MQTT broker, defaults to 1883
             --storage   File used for storing active subscriptions, defaults to /var/run/mqttMySensors/Gateway_xxx
             --log       File to log to, defaults to stdout
+			If you do not have a controller and the gateway should assigne nodeID's
+            --firstID	first nodeID to give to sensors, defaults to 0 -> do not give away nodeID's
+            --lastID	last nodeID to give to sensors; 0 < IDnumber < 255
+            --storageID File used to store nodeID's, defaults to /var/run/mqttMySensors/nodeID_xxx
 
 SYNTAX
     exit 1;
