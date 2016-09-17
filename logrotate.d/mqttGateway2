@@ -1,0 +1,11 @@
+/var/log/mysensors/gateway.log {
+    missingok
+    notifempty
+    sharedscripts
+    delaycompress
+    rotate 52
+    weekly
+    postrotate
+        /sbin/service mqttGateway graceful > /dev/null 2>/dev/null || true
+    endscript
+}

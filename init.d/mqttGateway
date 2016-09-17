@@ -1,0 +1,72 @@
+#!/bin/sh
+#
+# mqttGateway:	mqttGateway2.pl for MySensors network
+#
+# chkconfig:	- 27 73
+# description:	Starts and stops serial gateway for MySensors.
+# author:	Ralf Lehmannn <ralf@lehmann.com>
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+
+prog="mqttGateway2.pl"
+PROG="/root/scripts/$prog"
+INQ="/My"
+OUTQ=""
+OUTQ1=""
+FIRSTID="100"
+LASTID=""
+SERIAL="/dev/ttyUSB0"
+LOGFILE="/var/log/mysensors/gateway.log"
+pidfile="/var/run/${prog}.pid"
+
+start() {
+    echo -n $"Starting $prog: "
+
+    daemon --pidfile $pidfile "$PROG \
+	${SERIAL:+--serial $SERIAL} \
+	${INQ:+--root $INQ} \
+	${OUTQ:+--topicC2N $OUTQ} \
+	${OUTQ1:+--topic2node $OUTQ1} \
+	${LOGFILE:+--log $LOGFILE} \
+	${FIRSTID:+--first $FIRSTID} \
+	${LASTID:+--lst $LASTID} 2>/dev/null  &"
+
+    RETVAL=$?
+    [ $RETVAL -eq 0 ] && touch /var/lock/subsys/$prog
+    echo
+}
+
+stop() {
+        echo -n $"Stopping $prog: "
+
+	killproc $prog
+	
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/$prog
+}
+
+RETVAL=0
+# See how we were called.
+case "$1" in
+  start)
+  	start
+	;;
+  stop)
+  	stop
+	;;
+  status)
+	status $prog
+	RETVAL=$?
+	;;
+  graceful)
+	killproc $prog -HUP
+	;;
+  *)
+	echo "Usage: $0 {start|stop|graceful|status}"
+	exit 2
+esac
+
+exit $RETVAL
