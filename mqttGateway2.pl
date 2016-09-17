@@ -672,6 +672,16 @@ sub onCtrlC
   exit;
 }
 
+sub onSigHUP {
+        # for logrotate; reopen logfile
+        if ( $log ne "STDOUT" ){
+                close(OUT);
+                open( OUT, ">>$log" ) || die "Unable to write to logfile '$log': $!\n";
+                *STDOUT = *OUT;
+        }
+}
+
+
 if ($log ne "STDOUT")
 {
         # redirect STDOUT to logfile
@@ -725,6 +735,7 @@ dolog("");
 
 # Install Ctrl-C handler
 $SIG{INT} = \&onCtrlC;
+$SIG{HUP} = \&onSigHUP;
 
 initialiseSerialPort()  if ($useSerial);
 
