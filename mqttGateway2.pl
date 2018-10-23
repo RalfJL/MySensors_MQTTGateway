@@ -154,6 +154,8 @@ my $topic2node = '/mySensors2node';
 my $mqttHost = 'localhost';         # Hostname of MQTT broker
 my $mqttPort = 1883;                # Port of MQTT broker
 my $mqttClientId = "MySensors-".$$; # Unique client ID to broker
+my $mqttUser = undef;
+my $mqttPasswd = undef;
 
 # -- Settings when using Ethernet gateway
 my $mysnsHost   = undef;            # IP of MySensors Ethernet gateway
@@ -189,6 +191,8 @@ if ( GetOptions ( 'serial:s'   => \$serialPort,
 				  'topic2node:s' => \$topic2node,
                   'mqtthost:s' => \$mqttHost,
                   'mqttport:i' => \$mqttPort,
+                  'mqttuser:s' => \$mqttUser,
+                  'mqttpasswd:s' => \$mqttPasswd,
                   'gwhost:s'   => \$mysnsHost,
                   'gwport:i'   => \$mysnsPort,
                   'storage:s'  => \$subscriptionStorageFile,
@@ -750,6 +754,8 @@ while (1)
         host => $mqttHost,
         port => $mqttPort,
         keep_alive_timer => $keep_alive_timer,
+        user_name => $mqttUser,
+        password => $mqttPasswd,
         on_error => sub {
           my ($fatal, $message) = @_;
           if ($fatal) {
@@ -872,7 +878,7 @@ An MQTT gateway for use with the MySensors serial or ethernet gateway.
 Usage:      mqttGateway2 [--serial dev [--baud baudrate] [--bits bits] [--parity [none|odd|even]] [--stop numbits]] 
                          [--gwhost hostip [--gwport port]]
                          [--root mqttroot] [--topicC2N mqttcontrq] [--topic2node mqttnodeq]
-                         [--mqtthost mqtthost] [--mqttport mqttport]
+                         [--mqtthost mqtthost] [--mqttport mqttport] [--mqttuser mqttuser] [--mqttpasswd mqttpassword]
                          [--storage file] [--log file]
             mqttGateway2 --help
 
@@ -893,6 +899,8 @@ Options:    For serial connection to gateway:
             --topic2node MQTT topic used to send any message to a sensor node, defaults to /mySensors2node
             --mqtthost  IP address of MQTT broker, defaults to localhost
             --mqttport  Port of MQTT broker, defaults to 1883
+            --mqttuser  the username used to authenticate to mqtt server
+            --mqttpasswd the password used to authenticate to mqtt server
             --storage   File used for storing active subscriptions, defaults to /var/run/mqttMySensors/Gateway_xxx
             --log       File to log to, defaults to stdout
 			If you do not have a controller and the gateway should assigne nodeID's
@@ -903,3 +911,4 @@ Options:    For serial connection to gateway:
 SYNTAX
     exit 1;
 }
+
