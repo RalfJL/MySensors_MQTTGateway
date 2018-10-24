@@ -1,0 +1,123 @@
+#!/bin/sh
+#
+# mqttGateway:	mqttGateway2.pl for MySensors network
+#
+# chkconfig:	- 27 73
+# description:	Starts and stops serial gateway for MySensors.
+# author:	Ralf Lehmannn <ralf@lehmann.com>
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+
+prog="mqttGateway2.pl"
+PROG="/root/scripts/$prog"
+
+# gateway with the RFM69
+INQ="/My"
+OUTQ=""
+OUTQ1=""
+FIRSTID="100"
+LASTID=""
+#SERIAL="/dev/ttyUSB0"
+SERIAL="/dev/myGW69"
+LOGFILE="/var/log/mysensors/gateway.log"
+pidfile="/var/run/${prog}.pid"
+
+# gateway with the nrf24 chip
+INQ24="/My24"
+OUTQ24="/My24C2N"
+OUTQ124="/My242N"
+FIRSTID24="150"
+LASTID24=""
+SERIAL24="/dev/ttyUSB1"
+LOGFILE24="/var/log/mysensors/gateway24.log"
+pidfile24="/var/run/${prog}24.pid"
+
+# gateway with RFM69 NetId=0 encrypted
+INQX="/MyX"
+OUTQX="/MyXC2N"
+OUTQ1X="/MyX2N"
+FIRSTIDX="150"
+LASTIDX=""
+SERIALX="/dev/myGWX"
+#SERIALX="/dev/ttyACM0"
+LOGFILEX="/var/log/mysensors/gatewayX.log"
+pidfileX="/var/run/${prog}X.pid"
+BAUDX=57600
+
+start() {
+    echo -n $"Starting $prog: "
+
+    # nrf24
+#    daemon --pidfile $pidfile24 "$PROG \
+#	${SERIAL24:+--serial $SERIAL24} \
+#	${INQ24:+--root $INQ24} \
+#	${OUTQ24:+--topicC2N $OUTQ24} \
+#	${OUTQ124:+--topic2node $OUTQ124} \
+#	${LOGFILE24:+--log $LOGFILE24} \
+#	${FIRSTID24:+--first $FIRSTID24} \
+#	${LASTID24:+--lst $LASTID24} 2>/dev/null  &"
+
+    # RFM69 X
+    daemon --pidfile $pidfileX "$PROG \
+	${SERIALX:+--serial $SERIALX} \
+	${INQX:+--root $INQX} \
+	${OUTQX:+--topicC2N $OUTQX} \
+	${OUTQ1X:+--topic2node $OUTQ1X} \
+	${LOGFILEX:+--log $LOGFILEX} \
+	${BAUDX:+--baud $BAUDX} \
+	${FIRSTIDX:+--first $FIRSTIDX} \
+	${LASTIDX:+--lst $LASTIDX} 2>/dev/null  &"
+
+    # rfm69
+    daemon --pidfile $pidfile "$PROG \
+	${SERIAL:+--serial $SERIAL} \
+	${INQ:+--root $INQ} \
+	${OUTQ:+--topicC2N $OUTQ} \
+	${OUTQ1:+--topic2node $OUTQ1} \
+	${LOGFILE:+--log $LOGFILE} \
+	${FIRSTID:+--first $FIRSTID} \
+	${LASTID:+--lst $LASTID} 2>/dev/null  &"
+
+    RETVAL=$?
+    [ $RETVAL -eq 0 ] && touch /var/lock/subsys/$prog
+    echo
+}
+
+stop() {
+        echo -n $"Stopping $prog: "
+	
+	pkill $prog
+	#killproc -p $pidfile
+	#killproc -p $pidfileX
+	
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/$prog
+}
+
+RETVAL=0
+# See how we were called.
+case "$1" in
+  start)
+  	start
+	;;
+  stop)
+  	stop
+	;;
+  status)
+	status $prog
+	RETVAL=$?
+	;;
+  graceful)
+	pkill -HUP $prog
+	#killproc -p $pidfile -HUP
+	#killproc -p $pidfileX -HUP
+	;;
+  *)
+	echo "Usage: $0 {start|stop|graceful|status}"
+	exit 2
+esac
+
+exit $RETVAL
